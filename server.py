@@ -5,6 +5,7 @@ import selectors
 import os
 import importlib
 import re
+import inspect
 
 from collections.abc import Callable
 
@@ -136,7 +137,7 @@ class App:
                     # NOTE(vanya): Call component rendering function with argments if parsed any
                     if key_value_pairs:
                         render_callback_signature = inspect.signature(component.render_callback)
-                        if len(sig.parameters) > 0:
+                        if len(render_callback_signature.parameters) > 0:
                             replace_str = component.render_callback(key_value_pairs)
                     else:
                         replace_str = component.render_callback()
@@ -333,7 +334,7 @@ class App:
             logger.info(f"App down, because App.serving == False")
             
         except KeyboardInterrupt:
-            logger.info("Received KeyboardInterrupt from Python (SIGINT from OS), closing server.")
+            logger.info("Received KeyboardInterrupt from Python, closing server.")
             self.serving = False
         
         server.close()
