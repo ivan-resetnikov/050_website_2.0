@@ -1,0 +1,287 @@
+@last_edit 2026-02-16T12:33:00+01:00
+
+<title>Awaiting multiple signals in Godot</title>
+<body>
+    <h2>Usage</h2>
+
+    <div class="figure-row">
+        <figure>
+            <video loop controls poster>
+                <source src="/public/videos/" type="video/webm">
+            </video>
+            <figcaption>Video TBD, hehe</figcaption>
+        </figure>
+        <figure class="code-window">
+            <figcaption>code_for_the_video.gd</figcaption>
+            <pre><code>
+await SignalGroup.await_all([
+        player.say("Oh look here!"),
+        player.walk_to(table_marker.global_position)
+])
+player.say("Nice table")
+            </code></pre>
+        </figure>
+    </div>
+
+    <figure class="center-figure w-50 quote">
+        <blockquote>
+            ...but those ideas are left as an exercise for the reader.
+        </blockquote>
+        <figcaption>
+            <cite>
+                - The kind sir at the end of his article
+            </cite>
+        </figcaption>
+    </figure>
+
+    <h2>Selling the signals feature</h2>
+
+    <p>
+        Signals is a Godot-native implementation of the observer-pattern.<br>
+        Signals define a relationship of <u>event → consequence(s)</u> while maintaining low coupling of your code! (very cool)
+    </p>
+
+    <figure class="center-figure w-50">
+        <video loop controls poster>
+            <source src="/public/videos/" type="video/webm">
+        </video>
+        <figcaption>Video TBD, hehe</figcaption>
+    </figure>
+
+    <h2>People often use signals like this,<br>but Godot does not have a way to do it natively</h2>
+    
+    <p>
+        Imagine your designer walks up to you, hands you the script and goes like:
+        <blockquote>
+            Here's the script for the new story section in the game:
+        </blockquote>
+
+        <figure>
+            <div class="center-figure w-50 script">
+                <pre>
+<p style="text-align: center;">
+Game Story Script    
+</p>
+EXPLAINING HOW THINGS ARE DONE AROUND THESE PARTS
+
+...
+
+Colt is walking toward the chair to sit down, as he speaks:
+
+<p style="text-align: center;">
+COLT
+(condescending)
+
+Lemme tell 'ya how things are done 'round these parts, partner
+</p>
+<p style="text-align: center;">
+COLT
+
+This is a dangerous place, and _I_ sell protection.
+</p>
+...
+                </pre>
+            </div>
+            <figcaption>The script outlining a situation where a character has to talk while walking towards the chair next to them</figcaption>
+        </figure>
+    </p>
+
+
+    <h2>At the same time!?</h2>
+
+    <p>You immediately notice that a character has to do two things simultaneously, before the script can continue.</p>
+
+    <p>You can't write it sequentially and Godot's await keyword does not support multiple awaitables (be it Callable or Signal).</p>
+
+    <h2>Solution</h2>
+
+    <p>
+        I was in a similar situation myself, and in my search for the solution I found this article
+        <a href="https://shaggydev.com/2025/06/12/godot-awaiting-signals/" target="_blank">"Awaiting multiple signals in Godot 4"</a> by Jason McCollum.
+    </p>
+
+    <p>
+        The idea of the original goes like this:
+    </p>
+
+    <figure class="code-window w-50 center-figure">
+        <figcaption>article_example.gd</figcaption>
+        <pre><code>
+class_name SignalGroup
+extends RefCounted
+
+signal _all_complete
+
+var _counter: int = 0
+
+func all(signals: Array) -> void:
+	_counter = signals.size()
+	
+	if _counter == 0:
+		return
+		
+	for sig in signals:
+		sig.connect(_on_signal_complete, CONNECT_ONE_SHOT)
+	
+	await _all_complete
+	
+func _on_signal_complete() -> void:
+	_counter -= 1
+	if _counter == 0:
+		_all_complete.emit()
+        </code></pre>
+    </figure>
+
+    <p>And the usage is simple</p>
+
+    <figure class="code-window w-50 center-figure">
+        <figcaption>using_the_article_example.gd</figcaption>
+        <pre><code>
+var sg := SignalGroup.new()
+await sg.all([
+        player.say("Oh look here!"),
+        player.walk_to(table_marker.global_position)
+])
+        </code></pre>
+    </figure>
+
+
+    <h2>Shortcommings of the original implementation</h2>
+
+    <figure class="center-figure w-50 quote">
+        <blockquote>
+            The rationale to make it as smooth as possible is:
+            Because any changes that save time and hand rail the usage (to an extent of course!) are good for production.
+            And this is a simple improvement.
+        </blockquote>
+        <figcaption>
+            <cite>
+                - Me, just now
+            </cite>
+        </figcaption>
+    </figure>
+    
+    <ul>
+        <li>
+            <p>
+                One object of <code>SignalGroup</code> holds its own array of signals that it can wait for, following some strategy.
+                There is an off-change that a <code>SignalGroup</code> will be reused without waiting for the old batch to finish. That will break the <code>SignalGroup</code>...
+            </p>
+        </li>
+
+        <li>
+            <p>
+                So, I created SignalGroup factories. <code>all</code> and <code>any</code> to create and await for the awaitables
+                without worrying about state corruption, and thinking about variable names.
+            </p>
+        </li>
+
+        <li>
+            <p>
+                I made use of variadic arguments added to Godot in <a href="https://github.com/godotengine/godot-proposals/issues/1034" target="_blank">#1034</a>,
+                to prevent a crash when awaiting for a signal that passes a parameter.
+            </p>
+        </li>
+
+        <li>
+            <p>I added support for couroutines too!</p>
+
+            <aside>
+                <a href="https://docs.godotengine.org/en/latest/tutorials/scripting/gdscript/gdscript_basics.html#awaiting-signals-or-coroutines">Awaiting signals or coroutines @ Godot Docs → GDScript reference</a>
+            </aside>
+        
+            <p>You can now await for functons too which simplies the usage as such:</p>
+
+            <div class="figure-row center-figure">
+                <figure class="code-window">
+                    <figcaption>before.gd</figcaption>
+                    <pre><code>
+player.say("Oh look here!")
+player.walk_to(table_marker.global_position)
+
+var sg := SignalGroup.new()
+await sg.all([
+    player.finished_talking,
+    player.finished_walking
+])
+                    </code></pre>
+                </figure>
+                <figure class="code-window">
+                    <figcaption>after.gd</figcaption>
+                    <pre><code>
+await SignalGroup.new_await_all([
+    player.say.bind("Oh look here!"),
+    player.walk_to.bind(table_marker.global_position)
+])
+                    </code></pre>
+                </figure>
+            </div>
+
+            <aside class="note">
+                <p>
+                    This also handles an unsafe condition where, for example -
+                    if the player is <i>already</i> in the target position,
+                    <code>player.walk_to</code> emits the signal <code>finished_walking</code> right away!
+                </p>
+            </aside>
+        </li>
+    </ul>
+
+    <h2>Final code</h2>
+
+    <figure class="code-window">
+        <figcaption>code.gd</figcaption>
+        <pre><code>
+class_name SignalGroup
+extends RefCounted
+
+
+signal all_complete
+signal any_one_complete
+
+
+var signals_left: int = 0
+
+
+func invoke_all(p_awaitables: Array[Variant]) -> void:
+	signals_left = p_awaitables.size()
+	
+	if signals_left == 0:
+		return
+	
+	for awaitable: Variant in p_awaitables:
+		if awaitable is Signal:
+			awaitable.connect(_on_one_signal_complete, CONNECT_ONE_SHOT)
+		elif awaitable is Callable:
+			var await_callable: Callable = func() -> void:
+				await awaitable.call()
+				_on_one_signal_complete()
+			await_callable.call()
+		else:
+			assert(false, "Passed a non-awaitable, must be Signal or Callable but got %s" % awaitable.get_class())
+
+
+func _on_one_signal_complete(..._args: Array) -> void:
+	signals_left -= 1
+	
+	any_one_complete.emit()
+	
+	if signals_left == 0:
+		all_complete.emit()
+
+
+static func new_await_all(p_signals: Array[Variant]) -> void:
+	var signal_group := SignalGroup.new()
+	signal_group.invoke_all(p_signals)
+	await signal_group.all_complete
+
+
+static func new_await_any(p_signals: Array[Variant]) -> void:
+	var signal_group := SignalGroup.new()
+	signal_group.invoke_all(p_signals)
+	await signal_group.any_one_complete
+        </code></pre>
+    </figure>
+
+    <link rel="stylesheet" href="/public/styles/articles/0.css">
+</body>

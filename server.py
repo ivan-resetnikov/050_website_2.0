@@ -14,7 +14,7 @@ LIB_NAME: str = "server.py"
 
 
 logger = logging.getLogger(LIB_NAME)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 selector = selectors.DefaultSelector()
 
@@ -54,6 +54,7 @@ class App:
         self.routes: list[Route] = []
         self.components: list[Component] = []
         self.public_dir_path: str = ""
+        self.public_dir_route: str = ""
 
 
     def route(self, p_route_path: str) -> Callable:
@@ -102,7 +103,7 @@ class App:
         return Error.SUCCESS
 
 
-    def render_html(self, p_html_source: str) -> str:
+    def render_html(self, p_html_source: str, p_extra_replace: dict) -> str:
         rendered_source: str = p_html_source
 
         # NOTE(vanya): Replace all component syntax with registered components until none are lefr
@@ -117,35 +118,47 @@ class App:
             replace_str: str = ""
 
             # NOTE(vanya): Parse component syntax
-            component_inner_syntax: str = component_regex_match.group(0).removeprefix("{{").removesuffix("}}").strip(" ")
+            component_syntax: str = component_regex_match.group(0)
+            component_inner_syntax: str = component_syntax.removeprefix("{{").removesuffix("}}").strip()
             component_inner_tokens: list[str] = component_inner_syntax.split(" ")
 
-            if len(component_inner_tokens) == 0:
-                logger.warning("Found empty component syntax.")
+            key_value_pairs = dict(re.findall(r'(\w+)="([^"]*)"', component_inner_syntax))
 
-            else:
-                requested_component_name: str = component_inner_tokens[0]
+            requested_component_name: str = component_inner_syntax.split(None, 1)[0]
 
-                # NOTE(vanya): Search for a component to render the replacement
-                found_requested_component: bool = False
-                for component in self.components:
-                    if component.name == requested_component_name:
+            if not requested_component_name:
+                logger.warning(f"Component syntax without a component name! `{component_syntax}` `{requested_component_name}`")
+
+            # NOTE(vanya): Search for a component to render the replacement
+            found_requested_component: bool = False
+            for component in self.components:
+                if component.name == requested_component_name:
+                    # NOTE(vanya): Call component rendering function with argments if parsed any
+                    if key_value_pairs:
+                        render_callback_signature = inspect.signature(component.render_callback)
+                        if len(sig.parameters) > 0:
+                            replace_str = component.render_callback(key_value_pairs)
+                    else:
                         replace_str = component.render_callback()
-                        found_requested_component = True
-                        break
-                
-                if not found_requested_component:
+
+                    found_requested_component = True
+                    break
+            
+            if not found_requested_component:
+                if requested_component_name in p_extra_replace:
+                    replace_str = p_extra_replace[requested_component_name]
+                else:
                     logger.error(f"Could not find a requested component `{requested_component_name}`.")
 
             # NOTE(vanya): Replace HTML source
             rendered_source = rendered_source[:component_regex_match.start()] + replace_str + rendered_source[component_regex_match.end():]
-        
+
         return rendered_source
 
 
-    def render_html_file(self, p_html_file_path: str) -> str:
+    def render_html_file(self, p_html_file_path: str, **p_kargs: dict) -> str:
         with open(p_html_file_path, "r", encoding="utf-8") as f:
-            return self.render_html(f.read())
+            return self.render_html(f.read(), p_kargs)
     
 
     def load_file_bytes(self, p_file_path: str) -> bytes:
@@ -153,8 +166,9 @@ class App:
             return f.read()
     
 
-    def set_public_dir(self, p_path: str, p_access_policy: PublicAccessPolicy, p_serve_callback: Callable=None) -> Error:
+    def set_public_dir(self, p_path: str, p_route_prefix: str, p_access_policy: PublicAccessPolicy, p_serve_callback: Callable=None) -> Error:
         self.public_dir_path = p_path
+        self.public_dir_route = p_route_prefix
 
         match p_access_policy:
             case PublicAccessPolicy.SERVE_ALL:
@@ -481,28 +495,31 @@ class App:
 
     def get_route_bytes_or_404(self, p_path: str) -> tuple[bytes, Error]:
         # NOTE(vanya): Serve hard-coded routes
-        requested_route, error = self.get_route(p_path)
+        requested_route_bytes, error = self.get_route(p_path)
         if error == Error.SUCCESS:
-            logger.info(f"Serving route `{p_path}`")
-            return (requested_route, Error.SUCCESS)
+            logger.debug(f"Serving route `{p_path}`")
+            return (requested_route_bytes, Error.SUCCESS)
     
-        rel_path: str = ("." + p_path)
-        is_in_public_dir: bool = rel_path.startswith(self.public_dir_path)
+        is_in_public_dir: bool = p_path.startswith(self.public_dir_route)
         
         if is_in_public_dir:
             # NOTE(vanya): Serve 404 asset
-            logger.info(f"Asset route not found `{p_path}`.")
-
-            return (self.load_file_bytes(rel_path), Error.SUCCESS)
+            rel_path: str = os.path.join(self.public_dir_path, p_path.removeprefix(self.public_dir_route))
+            if os.path.exists(rel_path):
+                return (self.load_file_bytes(rel_path), Error.SUCCESS)
+            else:
+                # TODO(vanya): Custom 404 for public assets
+                logger.warning(f"Asset route not found `{p_path}`.")
+                return (b"404 - Route not found", Error.ROUTE_NOT_FOUND)
 
         else:
             # NOTE(vanya): Serve 404 page (not asset)
-            route_404, error = self.get_route("404")
+            route_404_bytes, error = self.get_route("404")
             if error == Error.SUCCESS:
-                logger.info(f"Serving route `404`")
-                return (route_404.render_callback(), Error.SUCCESS)
+                logger.info(f"Serving route `404` for requested path `{p_path}`")
+                return (route_404_bytes, Error.SUCCESS)
         
-            logger.info(f"Route not found `{p_path}` and no custom 404 page for given filetype (Searched for route `404`), serving default 404 page.")
+            logger.info(f"Route not found `{p_path}` and no custom 404 page (Searched for route `404`), serving {LIB_NAME}'s default 404 page.")
 
         # NOTE(vanya): Complete 404
         return (b"404 - Route not found", Error.SUCCESS)
@@ -512,10 +529,43 @@ class App:
         logger.debug(f"Matching registered routes for requested path `{p_path}`")
 
         for route in self.routes:
-            if route.path == p_path:
-                logger.debug(f"Matched with `{route.path}`")
+            catchall_params: dict = {}
 
-                return (route.render_callback(), Error.SUCCESS)
+            route_path_parts: list[str] = route.path.split("/")
+            requested_path_parts: list[str] = p_path.split("/")
+
+            if len(route_path_parts) != len(requested_path_parts):
+                continue
+
+            part_index_to_check: int = 0
+            while part_index_to_check < len(route_path_parts):
+                route_path_part: str = route_path_parts[part_index_to_check]
+                requested_path_part: str = requested_path_parts[part_index_to_check]
+                
+                part_matched: bool = False
+
+                if route_path_part.startswith("[") and route_path_part.endswith("]"):
+                    # NOTE(vanya): Catchall key
+                    catchall_key: str = route_path_part[1:-1]
+
+                    catchall_params[catchall_key] = requested_path_part
+                    part_matched = True
+
+                else:
+                    part_matched = route_path_part == requested_path_part
+                
+                if part_matched:
+                    # NOTE(vanya): Check if matched the entire path
+                    if part_index_to_check + 1 == len(route_path_parts):
+                        if catchall_params:
+                            return (route.render_callback(catchall_params), Error.SUCCESS)
+                        else:
+                            return (route.render_callback(), Error.SUCCESS)
+                else:
+                    # NOTE(vanya): Route didn't match
+                    break
+                
+                part_index_to_check += 1
         
         return (b"404", Error.ROUTE_NOT_FOUND)
     

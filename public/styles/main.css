@@ -97,7 +97,7 @@ time {
 .code-window figcaption::before {
     content: "";
 
-    background-image: url("/public/code.png");
+    background-image: url("/public/pictures/code.png");
     image-rendering: pixelated;
     background-size: contain;
     background-position: center;
@@ -111,9 +111,10 @@ time {
 }
 
 .code-window figcaption::after {
-    content: "";
+    content: "X";
+    font-style: normal;
+    color: #98a3c6;
 
-    background-image: url("/public/close.png");
     image-rendering: pixelated;
     background-size: contain;
     background-position: center;

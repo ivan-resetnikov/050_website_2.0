@@ -21,7 +21,7 @@
         </div>
 
         <div class="figure-row">
-            <div>
+            <main>
                 <div class="window">
                     <h2>Experience</h2>
 
@@ -158,30 +158,31 @@
                         <li>E-mail:<a href="mailto:contact@ivan-reshetnikov.dev">contact@ivan-reshetnikov.dev</a></li>
                     </ul>
                 </address>
-            </div>
+            </main>
 
-            <div class="window" style="overflow: scroll;">
+            <aside class="window" style="overflow: scroll;">
                 <h2>Yapping</h2>
 
                 <p>I occasionally post non-private things about career and hobbies<br>here are some latest posts!</p>
 
                 {{ posts_timeline }}
-            </div>
+            </aside>
         </div>
 
         <div class="window">
             <h2>Colophon</h2>
 
-            <i>Übertism yappatron</i>
-
-            <p>This website is written in vanilla HTML, CSS, and JavaScript. Pages are rendered with Python, optimized, then served to you. The HTTP server is written from scratch just like the rest of the website.</p>
-            <p>Honorable mention: Images are downscaled on the server before serving to you in the resolution you need in an ontimized format, WebP.</p>
-            <p>I learnt a lot with this project. HTTP protocol, page rendering, size-optimizating website resources, and self-hosting.</p>
-            
-            <figure>
-                {{ image path="/pictures/server.png" very_lazy="True" alt="A picture of a Raspberry Pi Zero 2 W, a microcomputer, on the floor. A white power cable is connected to it, and the thing has glowing LEDs. the picture is taken poorly, lmao" }}
-                <figcaption>This is the server, his name is lemon</figcaption>
-            </figure>
+            <div class="figure-row">
+                <div>
+                    <p>This website is written in vanilla HTML, CSS, and JavaScript. Pages are rendered with Python, optimized, then served to you. The HTTP server is written from scratch just like the rest of the website.</p>
+                    <p>Honorable mention: Images are downscaled on the server before serving to you in the resolution you need in an ontimized format, WebP.</p>
+                    <p>I learnt a lot with this project. HTTP protocol, page rendering, size-optimizating website resources, and self-hosting.</p>
+                </div>
+                <figure>
+                    {{ image path="/pictures/server.jpg" very_lazy="True" alt="A picture of a Raspberry Pi Zero 2 W, a microcomputer, on the floor. A white power cable is connected to it, and the thing has glowing LEDs. the picture is taken poorly, lmao" }}
+                    <figcaption>This is the server, his name is Lime</figcaption>
+                </figure>
+            </div>
         </div>
 
         {{ footer.html }}
@@ -199,9 +200,9 @@ function add_and_run_script(p_path) {
 
 // NOTE(vanya): Wait until the page is fully loaded then load optional scripts
 window.addEventListener('load', () => {
-    add_and_run_script("/public/localize_date.js")
-    add_and_run_script("/public/syntax_highlighting.js")
-    add_and_run_script("/public/very_lazy_img_fetch.js")
+    add_and_run_script("/public/javascript/localize_date.js")
+    add_and_run_script("/public/javascript/syntax_highlighting.js")
+    add_and_run_script("/public/javascript/very_lazy_img_fetch.js")
 });
     </script>
 </body>
